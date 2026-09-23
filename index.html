@@ -1,1 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NFPHSS Teacher App</title>
+</head>
 
+<body>
+
+  <h2>NFPHSS Teacher Attendance</h2>
+
+  <button onclick="openCamera()">Open Camera</button>
+
+  <br><br>
+
+  <video id="camera"
+         autoplay
+         playsinline
+         style="width:100%; max-width:400px; display:none;">
+  </video>
+
+  <p id="status"></p>
+
+  <script>
+    async function openCamera() {
+
+      const video = document.getElementById("camera");
+      const status = document.getElementById("status");
+
+      try {
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user"
+          },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        video.style.display = "block";
+
+        status.innerText = "Camera successfully open ho gaya.";
+
+      } catch (error) {
+
+        status.innerText =
+          "Camera Error: " + error.name + " - " + error.message;
+
+      }
+    }
+  </script>
+
+</body>
+</html>
