@@ -3,52 +3,735 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NFPHSS Teacher App</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .box {
+      background: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.1);
+    }
+
+    input, button, select, textarea {
+      width: 100%;
+      padding: 12px;
+      margin-top: 8px;
+      margin-bottom: 12px;
+      box-sizing: border-box;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+
+    button {
+      background: #1a73e8;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #aaa;
+    }
+
+    video {
+      width: 100%;
+      max-width: 400px;
+      border-radius: 10px;
+      background: black;
+    }
+
+    .status {
+      padding: 12px;
+      background: #f1f3f4;
+      border-radius: 8px;
+      white-space: pre-line;
+    }
+
+    #app {
+      display: none;
+    }
+  </style>
 </head>
 
 <body>
 
-  <h2>NFPHSS Teacher Attendance</h2>
+  <!-- LOGIN -->
+  <div id="loginBox" class="box">
 
-  <button onclick="openCamera()">Open Camera</button>
+    <h2>NFPHSS Teacher App</h2>
 
-  <br><br>
+    <label>Teacher ID</label>
+    <input id="teacherId" placeholder="NFPHSS-001">
 
-  <video id="camera"
-         autoplay
-         playsinline
-         style="width:100%; max-width:400px; display:none;">
-  </video>
+    <label>Password</label>
+    <input id="password" type="password" placeholder="Password">
 
-  <p id="status"></p>
+    <button onclick="login()">Login</button>
 
-  <script>
-    async function openCamera() {
+    <div id="loginStatus" class="status"></div>
 
-      const video = document.getElementById("camera");
-      const status = document.getElementById("status");
+  </div>
 
-      try {
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "user"
-          },
-          audio: false
-        });
+  <!-- MAIN APP -->
+  <div id="app">
 
-        video.srcObject = stream;
-        video.style.display = "block";
+    <div class="box">
 
-        status.innerText = "Camera successfully open ho gaya.";
+      <h2>Welcome</h2>
 
-      } catch (error) {
+      <div id="teacherInfo"></div>
+
+      <button onclick="checkGPS()">Check School GPS</button>
+
+      <div id="gpsStatus" class="status">
+        GPS check nahi kiya gaya.
+      </div>
+
+      <button id="timeInBtn" onclick="timeIn()">
+        TIME IN
+      </button>
+
+      <div id="attendanceStatus" class="status">
+        Attendance submit nahi hui.
+      </div>
+
+    </div>
+
+
+    <!-- FACE REGISTRATION -->
+    <div class="box">
+
+      <h3>Face Registration</h3>
+
+      <p>Camera test ke liye neeche button dabayein.</p>
+
+      <button onclick="openCamera()">
+        OPEN CAMERA
+      </button>
+
+      <video id="camera"
+             autoplay
+             playsinline
+             style="display:none;">
+      </video>
+
+      <br>
+
+      <button id="captureBtn"
+              onclick="capturePhoto()"
+              style="display:none;">
+        CAPTURE PHOTO
+      </button>
+
+      <canvas id="canvas"
+              style="display:none;">
+      </canvas>
+
+      <img id="photoPreview"
+           style="width:100%; margin-top:10px; display:none; border-radius:10px;">
+
+      <button id="stopBtn"
+              onclick="stopCamera()"
+              style="display:none;">
+        STOP CAMERA
+      </button>
+
+      <div id="faceStatus" class="status">
+        Face registration abhi pending hai.
+      </div>
+
+    </div>
+
+
+    <!-- LEAVE -->
+    <div class="box">
+
+      <h3>Leave Request</h3>
+
+      <label>Leave Type</label>
+
+      <select id="leaveType">
+        <option value="Casual">Casual Leave</option>
+        <option value="Sick">Sick Leave</option>
+      </select>
+
+      <label>Start Date</label>
+      <input type="date" id="startDate">
+
+      <label>End Date</label>
+      <input type="date" id="endDate">
+
+      <label>Reason</label>
+      <textarea id="reason"
+                placeholder="Leave reason"></textarea>
+
+      <button onclick="submitLeave()">
+        Submit Leave
+      </button>
+
+      <div id="leaveStatus" class="status"></div>
+
+    </div>
+
+
+    <!-- MY LEAVES -->
+    <div class="box">
+
+      <h3>My Leave Requests</h3>
+
+      <button onclick="loadMyLeaves()">
+        Check My Leave Status
+      </button>
+
+      <div id="myLeaves"></div>
+
+    </div>
+
+  </div>
+
+
+<script>
+
+const SCRIPT_URL =
+"https://script.google.com/macros/s/AKfycbyDZCVPGV7XIueSDWYbVuzrIJ8e0oEgTKAvTbrXwxgL7ClRrMUAWHn6REM-f0QsEcOU/exec";
+
+
+let loggedInTeacherId = "";
+let loggedInTeacherName = "";
+let currentLatitude = null;
+let currentLongitude = null;
+let cameraStream = null;
+
+
+/* =========================
+   LOGIN
+========================= */
+
+function login() {
+
+  const id =
+    document.getElementById("teacherId").value.trim();
+
+  const password =
+    document.getElementById("password").value.trim();
+
+  const status =
+    document.getElementById("loginStatus");
+
+  if (!id || !password) {
+
+    status.innerText =
+      "Teacher ID aur Password enter karein.";
+
+    return;
+  }
+
+  status.innerText = "Login checking...";
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+
+      if (result && result.success) {
+
+        loggedInTeacherId = result.teacherId;
+        loggedInTeacherName = result.teacherName;
+
+        document.getElementById("loginBox").style.display =
+          "none";
+
+        document.getElementById("app").style.display =
+          "block";
+
+        document.getElementById("teacherInfo").innerText =
+          "Teacher: " + loggedInTeacherName +
+          "\nID: " + loggedInTeacherId;
+
+      } else {
 
         status.innerText =
-          "Camera Error: " + error.name + " - " + error.message;
+          result && result.message
+          ? result.message
+          : "Login failed.";
 
       }
+
+    })
+    .withFailureHandler(function(error) {
+
+      status.innerText =
+        "Connection Error: " + error.message;
+
+    })
+    .teacherLogin(id, password);
+}
+
+
+/* =========================
+   GPS
+========================= */
+
+function checkGPS() {
+
+  const status =
+    document.getElementById("gpsStatus");
+
+  if (!navigator.geolocation) {
+
+    status.innerText =
+      "Is device par GPS supported nahi hai.";
+
+    return;
+  }
+
+  status.innerText =
+    "GPS location check ho rahi hai...";
+
+  navigator.geolocation.getCurrentPosition(
+
+    function(position) {
+
+      currentLatitude =
+        position.coords.latitude;
+
+      currentLongitude =
+        position.coords.longitude;
+
+      google.script.run
+        .withSuccessHandler(function(result) {
+
+          if (result.valid) {
+
+            status.innerText =
+              "GPS VALID\nDistance: " +
+              Math.round(result.distance) +
+              " meters";
+
+          } else {
+
+            status.innerText =
+              "GPS INVALID\nDistance: " +
+              Math.round(result.distance) +
+              " meters\n\nSchool ke 100 meters ke andar hona zaroori hai.";
+
+          }
+
+        })
+        .withFailureHandler(function(error) {
+
+          status.innerText =
+            "GPS Error: " + error.message;
+
+        })
+        .checkGPS(
+          currentLatitude,
+          currentLongitude
+        );
+
+    },
+
+    function(error) {
+
+      status.innerText =
+        "GPS Permission Error: " +
+        error.message;
+
+    },
+
+    {
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
     }
-  </script>
+
+  );
+}
+
+
+/* =========================
+   TIME IN
+========================= */
+
+function timeIn() {
+
+  const status =
+    document.getElementById("attendanceStatus");
+
+  if (!loggedInTeacherId) {
+
+    status.innerText =
+      "Pehle login karein.";
+
+    return;
+  }
+
+  if (
+    currentLatitude === null ||
+    currentLongitude === null
+  ) {
+
+    status.innerText =
+      "Pehle Check School GPS karein.";
+
+    return;
+  }
+
+  status.innerText =
+    "Attendance submit ho rahi hai...";
+
+  document.getElementById("timeInBtn").disabled =
+    true;
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+
+      document.getElementById("timeInBtn").disabled =
+        false;
+
+      if (result.success) {
+
+        status.innerText =
+          "Attendance Successful\n\n" +
+          "Status: " + result.status +
+          "\nTime: " + result.time;
+
+      } else {
+
+        status.innerText =
+          result.message ||
+          "Attendance submit nahi hui.";
+
+      }
+
+    })
+    .withFailureHandler(function(error) {
+
+      document.getElementById("timeInBtn").disabled =
+        false;
+
+      status.innerText =
+        "Error: " + error.message;
+
+    })
+    .submitAttendance(
+      loggedInTeacherId,
+      loggedInTeacherName,
+      currentLatitude,
+      currentLongitude
+    );
+}
+
+
+/* =========================
+   CAMERA
+========================= */
+
+async function openCamera() {
+
+  const video =
+    document.getElementById("camera");
+
+  const status =
+    document.getElementById("faceStatus");
+
+  try {
+
+    cameraStream =
+      await navigator.mediaDevices.getUserMedia({
+
+        video: {
+          facingMode: "user"
+        },
+
+        audio: false
+
+      });
+
+    video.srcObject =
+      cameraStream;
+
+    video.style.display =
+      "block";
+
+    document.getElementById("captureBtn").style.display =
+      "block";
+
+    document.getElementById("stopBtn").style.display =
+      "block";
+
+    status.innerText =
+      "Camera successfully open ho gaya.";
+
+  }
+
+  catch(error) {
+
+    status.innerText =
+      "Camera Error: " +
+      error.name +
+      "\n" +
+      error.message;
+
+  }
+}
+
+
+function capturePhoto() {
+
+  const video =
+    document.getElementById("camera");
+
+  const canvas =
+    document.getElementById("canvas");
+
+  const preview =
+    document.getElementById("photoPreview");
+
+  canvas.width =
+    video.videoWidth;
+
+  canvas.height =
+    video.videoHeight;
+
+  const context =
+    canvas.getContext("2d");
+
+  context.drawImage(
+    video,
+    0,
+    0,
+    canvas.width,
+    canvas.height
+  );
+
+  preview.src =
+    canvas.toDataURL("image/jpeg");
+
+  preview.style.display =
+    "block";
+
+  document.getElementById("faceStatus").innerText =
+    "Photo capture ho gayi.\n\n" +
+    "Abhi photo database mein save nahi hui.";
+
+}
+
+
+function stopCamera() {
+
+  if (cameraStream) {
+
+    cameraStream.getTracks().forEach(
+      track => track.stop()
+    );
+
+    cameraStream = null;
+  }
+
+  document.getElementById("camera").style.display =
+    "none";
+
+  document.getElementById("captureBtn").style.display =
+    "none";
+
+  document.getElementById("stopBtn").style.display =
+    "none";
+
+}
+
+
+/* =========================
+   LEAVE
+========================= */
+
+function submitLeave() {
+
+  const type =
+    document.getElementById("leaveType").value;
+
+  const start =
+    document.getElementById("startDate").value;
+
+  const end =
+    document.getElementById("endDate").value;
+
+  const reason =
+    document.getElementById("reason").value.trim();
+
+  const status =
+    document.getElementById("leaveStatus");
+
+  if (!start || !end || !reason) {
+
+    status.innerText =
+      "Leave Type, Start Date, End Date aur Reason complete karein.";
+
+    return;
+  }
+
+  const today =
+    new Date();
+
+  today.setHours(0,0,0,0);
+
+  const startDate =
+    new Date(start + "T00:00:00");
+
+  const minimumDate =
+    new Date(today);
+
+  minimumDate.setDate(
+    minimumDate.getDate() + 1
+  );
+
+  if (startDate < minimumDate) {
+
+    status.innerText =
+      "Leave kam az kam 1 din pehle submit karni hogi.";
+
+    return;
+  }
+
+  status.innerText =
+    "Leave submit ho rahi hai...";
+
+  google.script.run
+    .withSuccessHandler(function(result) {
+
+      if (result.success) {
+
+        status.innerText =
+          result.message ||
+          "Leave successfully submitted.";
+
+        document.getElementById("reason").value =
+          "";
+
+        loadMyLeaves();
+
+      } else {
+
+        status.innerText =
+          result.message ||
+          "Leave submit nahi hui.";
+
+      }
+
+    })
+    .withFailureHandler(function(error) {
+
+      status.innerText =
+        "Error: " + error.message;
+
+    })
+    .submitLeaveRequest(
+      loggedInTeacherId,
+      loggedInTeacherName,
+      type,
+      start,
+      end,
+      reason
+    );
+}
+
+
+/* =========================
+   MY LEAVES
+========================= */
+
+function loadMyLeaves() {
+
+  const container =
+    document.getElementById("myLeaves");
+
+  container.innerHTML =
+    "Loading...";
+
+  google.script.run
+    .withSuccessHandler(function(data) {
+
+      if (!data || data.length === 0) {
+
+        container.innerHTML =
+          "<p>No leave requests found.</p>";
+
+        return;
+      }
+
+      let html =
+        "<table border='1' cellpadding='8' style='width:100%; border-collapse:collapse;'>";
+
+      html +=
+        "<tr>" +
+        "<th>Type</th>" +
+        "<th>Start</th>" +
+        "<th>End</th>" +
+        "<th>Status</th>" +
+        "<th>Remarks</th>" +
+        "</tr>";
+
+      data.forEach(function(row) {
+
+        html +=
+          "<tr>" +
+          "<td>" + escapeHtml(row.leaveType) + "</td>" +
+          "<td>" + escapeHtml(row.startDate) + "</td>" +
+          "<td>" + escapeHtml(row.endDate) + "</td>" +
+          "<td>" + escapeHtml(row.approvalStatus) + "</td>" +
+          "<td>" + escapeHtml(row.adminRemarks) + "</td>" +
+          "</tr>";
+
+      });
+
+      html +=
+        "</table>";
+
+      container.innerHTML =
+        html;
+
+    })
+    .withFailureHandler(function(error) {
+
+      container.innerHTML =
+        "Error: " + error.message;
+
+    })
+    .getTeacherLeaveRequests(
+      loggedInTeacherId
+    );
+}
+
+
+/* =========================
+   SECURITY DISPLAY
+========================= */
+
+function escapeHtml(value) {
+
+  if (value === null ||
+      value === undefined) {
+
+    return "";
+  }
+
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+</script>
 
 </body>
 </html>
