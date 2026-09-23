@@ -113,7 +113,7 @@
 
       <h3>Face Registration</h3>
 
-      <p>Camera test ke liye neeche button dabayein.</p>
+      <p>Camera se photo lene ke liye neeche button dabayein.</p>
 
       <button onclick="openCamera()">
         OPEN CAMERA
@@ -172,6 +172,7 @@
       <input type="date" id="endDate">
 
       <label>Reason</label>
+
       <textarea id="reason"
                 placeholder="Leave reason"></textarea>
 
@@ -202,22 +203,56 @@
 
 <script>
 
+/* =========================
+   APPS SCRIPT URL
+========================= */
+
 const SCRIPT_URL =
 "https://script.google.com/macros/s/AKfycbyDZCVPGV7XIueSDWYbVuzrIJ8e0oEgTKAvTbrXwxgL7ClRrMUAWHn6REM-f0QsEcOU/exec";
 
 
 let loggedInTeacherId = "";
 let loggedInTeacherName = "";
+
 let currentLatitude = null;
 let currentLongitude = null;
+
 let cameraStream = null;
+
+
+/* =========================
+   API FUNCTION
+========================= */
+
+async function apiRequest(data) {
+
+  const response = await fetch(SCRIPT_URL, {
+
+    method: "POST",
+
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8"
+    },
+
+    body: JSON.stringify(data)
+
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      "Server Error: " + response.status
+    );
+  }
+
+  return await response.json();
+}
 
 
 /* =========================
    LOGIN
 ========================= */
 
-function login() {
+async function login() {
 
   const id =
     document.getElementById("teacherId").value.trim();
@@ -228,6 +263,7 @@ function login() {
   const status =
     document.getElementById("loginStatus");
 
+
   if (!id || !password) {
 
     status.innerText =
@@ -236,43 +272,69 @@ function login() {
     return;
   }
 
-  status.innerText = "Login checking...";
 
-  google.script.run
-    .withSuccessHandler(function(result) {
+  status.innerText =
+    "Login checking...";
 
-      if (result && result.success) {
 
-        loggedInTeacherId = result.teacherId;
-        loggedInTeacherName = result.teacherName;
+  try {
 
-        document.getElementById("loginBox").style.display =
-          "none";
+    const result =
+      await apiRequest({
 
-        document.getElementById("app").style.display =
-          "block";
+        action: "login",
 
-        document.getElementById("teacherInfo").innerText =
-          "Teacher: " + loggedInTeacherName +
-          "\nID: " + loggedInTeacherId;
+        teacherId: id,
 
-      } else {
+        password: password
 
-        status.innerText =
-          result && result.message
-          ? result.message
-          : "Login failed.";
+      });
 
-      }
 
-    })
-    .withFailureHandler(function(error) {
+    if (result && result.success) {
+
+      loggedInTeacherId =
+        result.teacherId;
+
+      loggedInTeacherName =
+        result.teacherName;
+
+
+      document.getElementById("loginBox")
+        .style.display = "none";
+
+
+      document.getElementById("app")
+        .style.display = "block";
+
+
+      document.getElementById("teacherInfo")
+        .innerText =
+          "Teacher: " +
+          loggedInTeacherName +
+          "\nID: " +
+          loggedInTeacherId;
+
+
+    } else {
 
       status.innerText =
-        "Connection Error: " + error.message;
+        result && result.message
+        ? result.message
+        : "Login failed.";
 
-    })
-    .teacherLogin(id, password);
+    }
+
+  }
+
+  catch(error) {
+
+    status.innerText =
+      "Connection Error:\n" +
+      error.message;
+
+  }
+
 }
 
 
@@ -285,6 +347,7 @@ function checkGPS() {
   const status =
     document.getElementById("gpsStatus");
 
+
   if (!navigator.geolocation) {
 
     status.innerText =
@@ -293,12 +356,14 @@ function checkGPS() {
     return;
   }
 
+
   status.innerText =
     "GPS location check ho rahi hai...";
 
+
   navigator.geolocation.getCurrentPosition(
 
-    function(position) {
+    async function(position) {
 
       currentLatitude =
         position.coords.latitude;
@@ -306,54 +371,78 @@ function checkGPS() {
       currentLongitude =
         position.coords.longitude;
 
-      google.script.run
-        .withSuccessHandler(function(result) {
 
-          if (result.valid) {
+      try {
 
-            status.innerText =
-              "GPS VALID\nDistance: " +
-              Math.round(result.distance) +
-              " meters";
+        const result =
+          await apiRequest({
 
-          } else {
+            action: "checkGPS",
 
-            status.innerText =
-              "GPS INVALID\nDistance: " +
-              Math.round(result.distance) +
-              " meters\n\nSchool ke 100 meters ke andar hona zaroori hai.";
+            latitude:
+              currentLatitude,
 
-          }
+            longitude:
+              currentLongitude
 
-        })
-        .withFailureHandler(function(error) {
+          });
+
+
+        if (result.valid) {
 
           status.innerText =
-            "GPS Error: " + error.message;
+            "GPS VALID\n" +
+            "Distance: " +
+            Math.round(result.distance) +
+            " meters";
 
-        })
-        .checkGPS(
-          currentLatitude,
-          currentLongitude
-        );
+        }
+
+        else {
+
+          status.innerText =
+            "GPS INVALID\n" +
+            "Distance: " +
+            Math.round(result.distance) +
+            " meters\n\n" +
+            "School ke 100 meters ke andar hona zaroori hai.";
+
+        }
+
+      }
+
+      catch(error) {
+
+        status.innerText =
+          "GPS Connection Error:\n" +
+          error.message;
+
+      }
 
     },
+
 
     function(error) {
 
       status.innerText =
-        "GPS Permission Error: " +
+        "GPS Permission Error:\n" +
         error.message;
 
     },
 
+
     {
+
       enableHighAccuracy: true,
+
       timeout: 15000,
+
       maximumAge: 0
+
     }
 
   );
+
 }
 
 
@@ -361,10 +450,14 @@ function checkGPS() {
    TIME IN
 ========================= */
 
-function timeIn() {
+async function timeIn() {
 
   const status =
     document.getElementById("attendanceStatus");
+
+  const button =
+    document.getElementById("timeInBtn");
+
 
   if (!loggedInTeacherId) {
 
@@ -373,6 +466,7 @@ function timeIn() {
 
     return;
   }
+
 
   if (
     currentLatitude === null ||
@@ -385,49 +479,67 @@ function timeIn() {
     return;
   }
 
+
   status.innerText =
     "Attendance submit ho rahi hai...";
 
-  document.getElementById("timeInBtn").disabled =
-    true;
+  button.disabled = true;
 
-  google.script.run
-    .withSuccessHandler(function(result) {
 
-      document.getElementById("timeInBtn").disabled =
-        false;
+  try {
 
-      if (result.success) {
+    const result =
+      await apiRequest({
 
-        status.innerText =
-          "Attendance Successful\n\n" +
-          "Status: " + result.status +
-          "\nTime: " + result.time;
+        action: "attendance",
 
-      } else {
+        teacherId:
+          loggedInTeacherId,
 
-        status.innerText =
-          result.message ||
-          "Attendance submit nahi hui.";
+        teacherName:
+          loggedInTeacherName,
 
-      }
+        latitude:
+          currentLatitude,
 
-    })
-    .withFailureHandler(function(error) {
+        longitude:
+          currentLongitude
 
-      document.getElementById("timeInBtn").disabled =
-        false;
+      });
+
+
+    if (result.success) {
 
       status.innerText =
-        "Error: " + error.message;
+        "Attendance Successful\n\n" +
+        "Status: " +
+        result.status +
+        "\nTime: " +
+        result.time;
 
-    })
-    .submitAttendance(
-      loggedInTeacherId,
-      loggedInTeacherName,
-      currentLatitude,
-      currentLongitude
-    );
+    }
+
+    else {
+
+      status.innerText =
+        result.message ||
+        "Attendance submit nahi hui.";
+
+    }
+
+  }
+
+  catch(error) {
+
+    status.innerText =
+      "Attendance Error:\n" +
+      error.message;
+
+  }
+
+
+  button.disabled = false;
+
 }
 
 
@@ -443,7 +555,20 @@ async function openCamera() {
   const status =
     document.getElementById("faceStatus");
 
+
   try {
+
+    if (
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+
+      throw new Error(
+        "Camera API browser mein available nahi hai."
+      );
+
+    }
+
 
     cameraStream =
       await navigator.mediaDevices.getUserMedia({
@@ -456,34 +581,45 @@ async function openCamera() {
 
       });
 
+
     video.srcObject =
       cameraStream;
+
 
     video.style.display =
       "block";
 
-    document.getElementById("captureBtn").style.display =
-      "block";
 
-    document.getElementById("stopBtn").style.display =
-      "block";
+    document.getElementById("captureBtn")
+      .style.display = "block";
+
+
+    document.getElementById("stopBtn")
+      .style.display = "block";
+
 
     status.innerText =
       "Camera successfully open ho gaya.";
 
   }
 
+
   catch(error) {
 
     status.innerText =
-      "Camera Error: " +
+      "Camera Error:\n" +
       error.name +
       "\n" +
       error.message;
 
   }
+
 }
 
+
+/* =========================
+   CAPTURE PHOTO
+========================= */
 
 function capturePhoto() {
 
@@ -496,55 +632,93 @@ function capturePhoto() {
   const preview =
     document.getElementById("photoPreview");
 
+
+  if (
+    !video.videoWidth ||
+    !video.videoHeight
+  ) {
+
+    document.getElementById("faceStatus")
+      .innerText =
+        "Camera image ready nahi hai. Thora wait karein.";
+
+    return;
+  }
+
+
   canvas.width =
     video.videoWidth;
 
   canvas.height =
     video.videoHeight;
 
+
   const context =
     canvas.getContext("2d");
 
+
   context.drawImage(
+
     video,
+
     0,
+
     0,
+
     canvas.width,
+
     canvas.height
+
   );
 
+
   preview.src =
-    canvas.toDataURL("image/jpeg");
+    canvas.toDataURL("image/jpeg", 0.85);
+
 
   preview.style.display =
     "block";
 
-  document.getElementById("faceStatus").innerText =
-    "Photo capture ho gayi.\n\n" +
-    "Abhi photo database mein save nahi hui.";
+
+  document.getElementById("faceStatus")
+    .innerText =
+      "Photo capture ho gayi.\n\n" +
+      "Abhi photo database mein save nahi hui.";
 
 }
 
+
+/* =========================
+   STOP CAMERA
+========================= */
 
 function stopCamera() {
 
   if (cameraStream) {
 
-    cameraStream.getTracks().forEach(
-      track => track.stop()
-    );
+    cameraStream
+      .getTracks()
+      .forEach(function(track) {
+
+        track.stop();
+
+      });
 
     cameraStream = null;
+
   }
 
-  document.getElementById("camera").style.display =
-    "none";
 
-  document.getElementById("captureBtn").style.display =
-    "none";
+  document.getElementById("camera")
+    .style.display = "none";
 
-  document.getElementById("stopBtn").style.display =
-    "none";
+
+  document.getElementById("captureBtn")
+    .style.display = "none";
+
+
+  document.getElementById("stopBtn")
+    .style.display = "none";
 
 }
 
@@ -553,7 +727,7 @@ function stopCamera() {
    LEAVE
 ========================= */
 
-function submitLeave() {
+async function submitLeave() {
 
   const type =
     document.getElementById("leaveType").value;
@@ -565,10 +739,12 @@ function submitLeave() {
     document.getElementById("endDate").value;
 
   const reason =
-    document.getElementById("reason").value.trim();
+    document.getElementById("reason")
+      .value.trim();
 
   const status =
     document.getElementById("leaveStatus");
+
 
   if (!start || !end || !reason) {
 
@@ -578,20 +754,27 @@ function submitLeave() {
     return;
   }
 
+
   const today =
     new Date();
 
   today.setHours(0,0,0,0);
 
+
   const startDate =
-    new Date(start + "T00:00:00");
+    new Date(
+      start + "T00:00:00"
+    );
+
 
   const minimumDate =
     new Date(today);
 
+
   minimumDate.setDate(
     minimumDate.getDate() + 1
   );
+
 
   if (startDate < minimumDate) {
 
@@ -601,46 +784,72 @@ function submitLeave() {
     return;
   }
 
+
   status.innerText =
     "Leave submit ho rahi hai...";
 
-  google.script.run
-    .withSuccessHandler(function(result) {
 
-      if (result.success) {
+  try {
 
-        status.innerText =
-          result.message ||
-          "Leave successfully submitted.";
+    const result =
+      await apiRequest({
 
-        document.getElementById("reason").value =
-          "";
+        action: "submitLeave",
 
-        loadMyLeaves();
+        teacherId:
+          loggedInTeacherId,
 
-      } else {
+        teacherName:
+          loggedInTeacherName,
 
-        status.innerText =
-          result.message ||
-          "Leave submit nahi hui.";
+        leaveType:
+          type,
 
-      }
+        startDate:
+          start,
 
-    })
-    .withFailureHandler(function(error) {
+        endDate:
+          end,
+
+        reason:
+          reason
+
+      });
+
+
+    if (result.success) {
 
       status.innerText =
-        "Error: " + error.message;
+        result.message ||
+        "Leave successfully submitted.";
 
-    })
-    .submitLeaveRequest(
-      loggedInTeacherId,
-      loggedInTeacherName,
-      type,
-      start,
-      end,
-      reason
-    );
+
+      document.getElementById("reason")
+        .value = "";
+
+
+      loadMyLeaves();
+
+    }
+
+    else {
+
+      status.innerText =
+        result.message ||
+        "Leave submit nahi hui.";
+
+    }
+
+  }
+
+  catch(error) {
+
+    status.innerText =
+      "Leave Error:\n" +
+      error.message;
+
+  }
+
 }
 
 
@@ -648,87 +857,133 @@ function submitLeave() {
    MY LEAVES
 ========================= */
 
-function loadMyLeaves() {
+async function loadMyLeaves() {
 
   const container =
     document.getElementById("myLeaves");
 
+
   container.innerHTML =
     "Loading...";
 
-  google.script.run
-    .withSuccessHandler(function(data) {
 
-      if (!data || data.length === 0) {
+  try {
 
-        container.innerHTML =
-          "<p>No leave requests found.</p>";
+    const data =
+      await apiRequest({
 
-        return;
-      }
+        action: "leaves",
 
-      let html =
-        "<table border='1' cellpadding='8' style='width:100%; border-collapse:collapse;'>";
-
-      html +=
-        "<tr>" +
-        "<th>Type</th>" +
-        "<th>Start</th>" +
-        "<th>End</th>" +
-        "<th>Status</th>" +
-        "<th>Remarks</th>" +
-        "</tr>";
-
-      data.forEach(function(row) {
-
-        html +=
-          "<tr>" +
-          "<td>" + escapeHtml(row.leaveType) + "</td>" +
-          "<td>" + escapeHtml(row.startDate) + "</td>" +
-          "<td>" + escapeHtml(row.endDate) + "</td>" +
-          "<td>" + escapeHtml(row.approvalStatus) + "</td>" +
-          "<td>" + escapeHtml(row.adminRemarks) + "</td>" +
-          "</tr>";
+        teacherId:
+          loggedInTeacherId
 
       });
 
+
+    if (!data || data.length === 0) {
+
+      container.innerHTML =
+        "<p>No leave requests found.</p>";
+
+      return;
+    }
+
+
+    let html =
+      "<table border='1' cellpadding='8' " +
+      "style='width:100%; border-collapse:collapse;'>";
+
+
+    html +=
+      "<tr>" +
+      "<th>Type</th>" +
+      "<th>Start</th>" +
+      "<th>End</th>" +
+      "<th>Status</th>" +
+      "<th>Remarks</th>" +
+      "</tr>";
+
+
+    data.forEach(function(row) {
+
       html +=
-        "</table>";
 
-      container.innerHTML =
-        html;
+        "<tr>" +
 
-    })
-    .withFailureHandler(function(error) {
+        "<td>" +
+        escapeHtml(row.leaveType) +
+        "</td>" +
 
-      container.innerHTML =
-        "Error: " + error.message;
+        "<td>" +
+        escapeHtml(row.startDate) +
+        "</td>" +
 
-    })
-    .getTeacherLeaveRequests(
-      loggedInTeacherId
-    );
+        "<td>" +
+        escapeHtml(row.endDate) +
+        "</td>" +
+
+        "<td>" +
+        escapeHtml(row.approvalStatus) +
+        "</td>" +
+
+        "<td>" +
+        escapeHtml(row.adminRemarks) +
+        "</td>" +
+
+        "</tr>";
+
+    });
+
+
+    html +=
+      "</table>";
+
+
+    container.innerHTML =
+      html;
+
+  }
+
+
+  catch(error) {
+
+    container.innerHTML =
+      "Error: " +
+      error.message;
+
+  }
+
 }
 
 
 /* =========================
-   SECURITY DISPLAY
+   ESCAPE HTML
 ========================= */
 
 function escapeHtml(value) {
 
-  if (value === null ||
-      value === undefined) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
 
     return "";
+
   }
 
+
   return String(value)
+
     .replace(/&/g, "&amp;")
+
     .replace(/</g, "&lt;")
+
     .replace(/>/g, "&gt;")
+
     .replace(/"/g, "&quot;")
+
     .replace(/'/g, "&#039;");
+
 }
 
 </script>
